@@ -80,7 +80,8 @@ Pod中的各种信息由命令中的json所决定
 
 ### 创建Pod的相应Service
 Service是K8s中，用于自动分配范围从30000至32767的端口号的一个服务类型。每一个Pod如果想获取一个公网IP和相应的port，都必须创建一个相应的Service。
-* 注意! 在k8s中，外网访问Pod的IP地址可以为任意一台连入集群的主机IP地址。
+
+【!】注意! 在k8s中，外网访问Pod的IP地址可以为任意一台连入集群的主机IP地址。
 
 
 	curl -k -v -X POST -H "Authorization: Bearer ey..Xg" -H 'Content-Type: application/json' --data '
@@ -120,13 +121,12 @@ Service是K8s中，用于自动分配范围从30000至32767的端口号的一个
 
 	curl -k -v -X DELETE -H "Authorization: Bearer ey..Xg" -H "Content-Type: application/json" https://59.110.220.63:6443/api/v1/namespaces/default/pods/pod-jupyter-233
 
-## 删除已创建的service
+### 删除已创建的service
 删除service与删除pod的不同之处在于：service可以立刻被删除。因此，在结束学员实验时，请先删除service，再删除Pod。
 
 	curl -k -v -X DELETE -H "Authorization: Bearer ey..Xg" -H "Content-Type: application/json" https://59.110.220.63:6443/api/v1/namespaces/default/services/pod-jupyter-233
 
 以上，即为K8s的常用API操作。感谢您的阅读。
-
 
 
 
