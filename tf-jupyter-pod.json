@@ -1,0 +1,48 @@
+{
+	"apiVersion": "v1",
+	"kind": "Pod",
+	"metadata": {
+		"name": "pod-jupyter-233",
+		"namespace": "default",
+		"labels": {
+			"name": "jupyter"
+		}
+	},
+	"spec": {
+		"restartPolicy": "Always",
+		"containers": [
+			{
+				"name": "pod-jupyter-233",
+				"image": "tensorflow/tensorflow:latest",
+				"imagePullPolicy": "Never",
+				"ports": [
+					{
+						"containerPort": 8888
+					}
+				],
+				"command": [
+					"/run_jupyter.sh"
+				],
+				"args": [
+					"--allow-root",
+					"--NotebookApp.token=abcdef"
+				],
+				"volumeMounts": [
+					{
+						"mountPath": "/notebooks",
+						"name": "test-volume"
+					}
+				]
+			}
+		],
+		"volumes": [
+			{
+				"name": "test-volume",
+				"hostPath": {
+					"path": "/mnt/userid",
+					"type": "Directory"
+				}
+			}
+		]
+	}
+}

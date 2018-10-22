@@ -1,75 +1,136 @@
-# Kubernetes RESTful Api 研究成果 & 说明文档
+# K8s Rest API 研究成果&基本功能 说明文档
 
-利用k8s的apiserver实现一系列pod常用操作。
-* 发起HTTP请求的工具为curl。若用nodejs改写，请区分GET、POST等请求。
+## 开发流程
+* 在学员点击开启实验时，向K8s-apiserver发起两个Post请求，分别创建pod和service
+* 使用Get请求循环查询pod和service的状态、及service的端口号。
+* 待pod的状态变为running后，将学员的页面跳转至 主节点的IP+端口号/?token=...
+*  待学员实验时间结束后，向K8s-apiserver发起两个Delete请求，按service和pod的顺序先后删除。
 
-### Part1 准备工作
-首先，需要确保k8s集群的正常工作。可以登陆master节点，使用kubectl命令确认。
+## K8s 实用 api 速查
 
-	kubectl get nodes
+首先，需要在K8s集群获取一串用于认证的token。这里省略这个步骤。
+以下命令中的所有如下格式的命令，均替换为完整的token才能够执行。
 
-若至少包括两个节点，分别为一主一从；且所有节点的status全部为Ready，则表明集群处于良好的运行状态。
-
-在确保集群处于正常运作状态后，使用ssh登陆master节点，并使用如下命令启动k8s的api-server的代理，并输入相应参数的特定值。
-
-	 # 参数解析:
-	 # --address='0.0.0.0' 监听IP为全网IP，在生产中可以改为发送消息的节点IP
-	 # --port=8001 启动的代理端口为8001
-	 # --accept-hosts='^*$' 表示所有来源都准入
-	 # 注意，本条命令未持久化启动。实际生产请持久化启动。
-	 kubectl proxy --address='0.0.0.0' --port=8001 --accept-hosts='^*$'
-
-* ps :关于这条命令的详解，具体请参考如下链接及k8s英文官方文档: https://blog.csdn.net/kozazyh/article/details/79421666
-
-至此，k8s的api-server已经启动完毕。可以在master节点使用如下命令确认api-server的开启情况。
-
-	# 将以下URL中的localhost改为IP亦可进行更为可靠的测试
-	# 查看当前k8s集群启动的所有pods的情况
-	curl localhost:8001/api/v1/pods
-	
-	# 列出指定节点内物理资源的统计信息
-	curl localhost:8001/api/v1/stats
-	
-	# 列出指定节点的概要信息
-	curl localhost:8001/api/v1/spec
+	-H "Authorization: Bearer ey...Xg" 
 
 
-### Part2 利用api操作Pods
-保证准备工作完成的情况下，可以在任何一台联网的主机上向上文指定的IP+port发起HTTP请求，来查看k8s集群的各种信息情况。
+### 查询Pods的基本信息
+通过使用k8s-api接口，查询Pods的基本信息。返回一个json格式的长文件。
 
-由于k8s的Api是基于REST的设计思想，因此，不同种类的HTTP请求也就对应了不同的操作。比较常用的对应关系是：
-* GET（SELECT）：从服务器取出资源（一项或多项）。GET请求对应k8s api的获取信息功能。因此，如果是获取信息的命令都要使用GET方式发起HTTP请求。
-* POST（CREATE）：在服务器新建一个资源。POST请求对应k8s api的创建功能。因此，需要创建Pods、ReplicaSet或者service的时候请使用这种方式发起请求。
-* PUT（UPDATE）：在服务器更新资源（客户端提供改变后的完整资源）。对应更新nodes或Pods的状态、ReplicaSet的自动备份数量等等。
-* PATCH（UPDATE）：在服务器更新资源（客户端提供改变的属性）。
-* DELETE（DELETE）：从服务器删除资源。在稀牛学院的学员使用完毕环境后，可以使用这种方式将Pod删除，释放资源。
+	curl -k -v -X GET -H "Authorization: Bearer ey...Xg" -H "Content-Type: application/json" https://59.110.220.63:6443/api/v1/namespaces/default/pods/
 
-具体关于RESTful Api的设计思想，详见阮老师的博客:http://www.ruanyifeng.com/blog/2014/05/restful_api.html
+### 查询指定Pod的信息
+在上一条命令中的最后，加入指定的Pod名，即可获得指定Pod的信息。
 
-	# 默认Get方式对相应master节点的api-server发起请求
-	curl 59.110.220.63:8001/api/v1/namespaces/default/
-	
-	# 列出所有k8s集群中的pods
-	curl 59.110.220.63:8001/api/v1/pods
-	
-	# 创建一个nginx pods (将这条命令最后的参数改为tensenflow就可以启动我们的GPU环境了。当然tensenflow的启动命令要写对，包括镜像的版本等。)
-	curl http://59.110.220.63:8001/api/v1/namespaces/default/pods    -XPOST -H'Content-Type: application/json' -d@nginx-pod.json
-	# 创建完毕后可以在master节点使用 kubectl get pods 查看
-	
-	# 查看k8s集群的所有service
-	curl 59.110.220.63:8001/api/v1/services
-	
-	# 删除Pods
-	curl 59.110.220.63:8001/api/v1/namespaces/default/pods/nginx -XDELETE
+	curl -k -v -X GET -H "Authorization: Bearer ey..Xg" -H "Content-Type: application/json" https://59.110.220.63:6443/api/v1/namespaces/default/pods/pod-jupyter-233
 
-以上，便是利用HTTP请求对k8s中pods进行的基本操作。利用上述的这些命令，即可基本实现上课功能的需求。这些命令的出处和更详细的解析，见：https://github.com/kubernetes/kubernetes/issues/17404
+### 创建指定的Pod
+Pod中的各种信息由命令中的json所决定
 
-### Part3 业务流程的思路
-根据目前稀牛学院与网易云课堂的合作，可以发现目前k8s集群的主要应用还是在于教学。故本人理解的业务流程如下。如无出入，实际的编码和测试也可以按照如下流程进行：
-* 由前端页面的学生发生点击行为，点击“启动实验环境”按钮
-* 网站服务向k8s的api-server发出一个Post属性的HTTP请求，创建一个Gpu环境的Pod
-* 在网站服务中向k8s发起Get属性的HTTP请求向，结合正则表达式，将刚创建好的Pod的相应IP地址、端口号提取出来。
-* 根据提取出来的IP和端口号，将学员的当前页面实行跳转，跳转到GPU环境的URL，学员即可开始进行实验
-* 在学员单击“结束实验”或实验时间结束，由网站服务向k8s发起DELETE的HTTP请求，delete相应的Pod。实验结束。至此，整个实验流程结束。
+	curl -k -v -X POST -H "Authorization: Bearer ey..Xg" -H 'Content-Type: application/json' --data '
+	{
+		"apiVersion": "v1",
+		"kind": "Pod",
+		"metadata": {
+			"name": "pod-jupyter-233",
+			"namespace": "default",
+			"labels": {
+				"name": "jupyter"
+			}
+		},
+		"spec": {
+			"restartPolicy": "Always",
+			"containers": [
+				{
+					"name": "pod-jupyter-233",
+					"image": "tensorflow/tensorflow:latest",
+					"imagePullPolicy": "Never",
+					"ports": [
+						{
+							"containerPort": 8888
+						}
+					],
+					"command": [
+						"/run_jupyter.sh"
+					],
+					"args": [
+						"--allow-root",
+						"--NotebookApp.token=abcdef"
+					],
+					"volumeMounts": [
+						{
+							"mountPath": "/notebooks",
+							"name": "test-volume"
+						}
+					]
+				}
+			],
+			"volumes": [
+				{
+					"name": "test-volume",
+					"hostPath": {
+						"path": "/mnt/userid",
+						"type": "Directory"
+					}
+				}
+			]
+		}
+	}
+	'  https://59.110.220.63:6443/api/v1/namespaces/default/pods
+
+### 创建Pod的相应Service
+Service是K8s中，用于自动分配范围从30000至32767的端口号的一个服务类型。每一个Pod如果想获取一个公网IP和相应的port，都必须创建一个相应的Service。
+* 注意! 在k8s中，外网访问Pod的IP地址可以为任意一台连入集群的主机IP地址。
+
+
+	curl -k -v -X POST -H "Authorization: Bearer ey..Xg" -H 'Content-Type: application/json' --data '
+	{
+		"kind": "Service",
+		"apiVersion": "v1",
+		"metadata": {
+			"name": "pod-jupyter-233",
+			"namespace": "default",
+			"labels": {
+				"name": "jupyter"
+			}
+		},
+		"spec": {
+			"type":"NodePort",
+			"ports": [{
+					"protocol":"TCP",
+					"port": 8888
+					}],
+			"selector": {"name": "jupyter"}
+		}
+	}
+	' https://59.110.220.63:6443/api/v1/namespaces/default/services
+
+### 查询全部的Services的信息
+通过查询Services的信息，可以获取K8s分配给Pod的外网端口号等信息。
+
+	curl -k -v -X GET -H "Authorization: Bearer ey..Xg" -H "Content-Type: application/json" https://59.110.220.63:6443/api/v1/namespaces/default/services
+
+### 指定一个service名称，查询指定名称的service信息
+用于获取端口号的常用操作
+
+	curl -k -v -X GET -H "Authorization: Bearer ey..Xg" -H "Content-Type: application/json" https://59.110.220.63:6443/api/v1/namespaces/default/services/pod-jupyter-233
+
+### 删除已创建的Pod
+用于删除已经存在的Pod。请注意，发起这个HTTP请求后，相应的Pod还需要经历一段时间的Terminating后，才会真正被删除。
+
+	curl -k -v -X DELETE -H "Authorization: Bearer ey..Xg" -H "Content-Type: application/json" https://59.110.220.63:6443/api/v1/namespaces/default/pods/pod-jupyter-233
+
+## 删除已创建的service
+删除service与删除pod的不同之处在于：service可以立刻被删除。因此，在结束学员实验时，请先删除service，再删除Pod。
+
+	curl -k -v -X DELETE -H "Authorization: Bearer ey..Xg" -H "Content-Type: application/json" https://59.110.220.63:6443/api/v1/namespaces/default/services/pod-jupyter-233
+
+以上，即为K8s的常用API操作。感谢您的阅读。
+
+
+
+
+
+
 
 
